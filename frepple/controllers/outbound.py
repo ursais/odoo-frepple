@@ -1174,7 +1174,7 @@ class exporter(object):
         yield "<!-- manufacturing orders in progress -->\n"
         yield "<operationplans>\n"
         m = self.env["mrp.production"]
-        recs = m.search([("state", "in", ["in_production", "confirmed", "ready"])])
+        recs = m.search([("state", "in", ["confirmed", "planned", "progress"])])
         fields = [
             "bom_id",
             "date_start",
@@ -1200,7 +1200,7 @@ class exporter(object):
                 operation = u"%d %s @ %s" % (
                     i["bom_id"][0],
                     item["name"],
-                    i["location_dest_id"][1],
+                    "Damage Control Engineering LLC",
                 )
                 try:
                     startdate = str(i["date_start"] or i["date_planned_start"]).replace(
@@ -1223,8 +1223,9 @@ class exporter(object):
                     )
                     / factor
                 )
-                yield '<operationplan type="MO" reference=%s start="%s" quantity="%s" status="confirmed"><operation name=%s/></operationplan>\n' % (
-                    quoteattr(i["name"]),
+                yield '<operationplan type="MO" reference="%s @ %s" start="%s" quantity="%s" status="confirmed"><operation name=%s/></operationplan>\n' % (
+                    i["name"],
+                    i["location_dest_id"][1],
                     startdate,
                     qty,
                     quoteattr(operation),
@@ -1303,12 +1304,15 @@ class exporter(object):
         """
         yield "<!-- inventory -->\n"
         yield "<buffers>\n"
-        self.env.cr.execute(
-            "SELECT product_id, location_id, sum(quantity) "
-            "FROM stock_quant "
-            "WHERE quantity > 0 "
-            "GROUP BY product_id, location_id "
-            "ORDER BY location_id ASC"
+        self.env.cr.execute("""
+            SELECT product_id, stock_quant.location_id, sum(quantity)
+            FROM stock_quant
+            INNER JOIN stock_location ON 
+                stock_location.id = stock_quant.location_id
+                AND stock_location.usage = 'internal'
+            WHERE quantity > 0
+            GROUP BY product_id, stock_quant.location_id
+            ORDER BY stock_quant.location_id ASC"""
         )
         inventory = {}
         for i in self.env.cr.fetchall():
